@@ -1,0 +1,38 @@
+{
+  "releases": [
+    {
+      "version": "1.0.1-F190626P1",
+      "date": "2026-06-19",
+      "changes": [
+        {
+          "type": "feature",
+          "description": "Initial release of QTS-app dashboard featuring Custom Voice and Voice Clone modes."
+        },
+        {
+          "type": "feature",
+          "description": "Added Personal Voice Library to permanently save and instantly load custom voice characters."
+        },
+        {
+          "type": "feature",
+          "description": "Added 'Instant Clone' (x-vector only) mode to bypass reference text transcription."
+        },
+        {
+          "type": "feature",
+          "description": "Added automatic language selection when choosing a preset character."
+        },
+        {
+          "type": "improvement",
+          "description": "Massive full-stack performance optimization utilizing React.memo and FastAPI routers, achieving peak CPU efficiency."
+        },
+        {
+          "type": "improvement",
+          "description": "Redesigned UI aesthetic to 'Obsidian & Silk', a lightweight minimal theme replacing heavy graphics with fast, satisfying micro-animations."
+        },
+        {
+          "type": "feature",
+          "description": "Added ability to delete audio items directly from the History Sidebar."
+        }
+      ]
+    }
+  ]
+}

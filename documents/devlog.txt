@@ -1,0 +1,34 @@
+Friday, 19 June 2026 Part 1 (F190626P1)
+---------------------------------------
+What we have accomplished from the start of the project until now:
+
+1. Initial Setup & Architecture Constraints:
+   - Configured the project to run Qwen3-TTS entirely on CPU (targeting Intel processors with an 8GB RAM limit) by completely disabling CUDA and flash_attention.
+   - Decided to use the 0.6B parameters models (Qwen3-TTS-0.6B-Base and CustomVoice) to prevent Out-Of-Memory crashes.
+
+2. Backend Development (FastAPI):
+   - Created `model_manager.py` for thread-safe switching between the Base and CustomVoice PyTorch models in memory.
+   - Created `audio_processor.py` to handle audio generation, bypassing garbage collection bottlenecks to improve CPU speed.
+   - Integrated Whisper-tiny to act as a transcriber fallback.
+   - Built a monolithic `main.py` containing endpoints for TTS, voice cloning, transcription, and model switching.
+
+3. Frontend Development (React + Vite):
+   - Built a dual-tab dashboard featuring "Custom Voice" (using predefined characters like Vivian, Dylan, etc.) and "Voice Clone" modes.
+   - Implemented `useMicrophone` hook and `AudioVisualizer` to allow users to directly record 3-10s voice samples for cloning.
+   - Built the `HistorySidebar` to persistently store generated audio (with download functionality).
+
+4. Advanced Voice Clone Features:
+   - Added an "Instant Clone" processing strategy (x-vector only mode) that completely bypasses the need for reference text.
+   - Added automatic transcription: If reference text is required, Whisper-tiny automatically transcribes the uploaded reference audio.
+   - Implemented a "Personal Voice Library" feature: Users can now name and permanently save a voice clone profile to a local library, which populates a dropdown for instant future usage.
+
+5. Major Full-Stack Optimization & Modularization Refactor:
+   - Backend: Sliced the monolithic `main.py` into clean FastAPI `routers/` (`tts.py`, `voice_library.py`, `models.py`).
+   - Frontend: Extracted massive files like `VoiceCloneForm.tsx` and `App.tsx` into dozens of tiny, highly focused child components (`VoiceLibrarySelector`, `ReferenceAudioInput`, `ProcessingStrategyToggle`, `TTSGeneratorCard`).
+   - Render Optimization: Heavily utilized `React.memo` to eliminate extreme re-rendering lag (e.g. typing text no longer causes the entire app or audio visualizer to re-render).
+
+6. "Obsidian & Silk" Premium UI Overhaul & Polish:
+   - Completely stripped out old CPU-heavy CSS template styles (massive animated aurora blobs, heavy glassmorphism blurs).
+   - Replaced it with a hyper-optimized "Obsidian & Silk" lightweight minimal aesthetic featuring a crisp `#0A0A0A` background, pastel accents, and satisfying spring-physics bouncy button animations.
+   - Added history deletion functionality (trash can icons).
+   - Added UX polish: Character selection now automatically switches to the character's respective native language.
