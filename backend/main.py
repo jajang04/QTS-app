@@ -16,7 +16,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Optimize PyTorch CPU Threading
+# Optimize PyTorch CPU Threading (4 is generally the golden number to prevent cache thrashing)
 torch.set_num_threads(4)
 
 @app.on_event("startup")

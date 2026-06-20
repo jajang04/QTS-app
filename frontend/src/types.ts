@@ -8,6 +8,13 @@ export interface HistoryItem {
   text: string;
   speaker: string;
   format: string;
-  audioUrl: string;
+  audioUrl?: string;
   timestamp: number;
+  batchId?: string;
+  quantize?: boolean;
+  generationTime?: number;
+  mode?: 'Custom Voice' | 'Voice Clone';
+  fxType?: string;
+  ramUsage?: string;
+  cpuUsage?: string;
 }

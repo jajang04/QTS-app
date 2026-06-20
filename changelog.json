@@ -1,6 +1,56 @@
 {
   "releases": [
     {
+      "version": "1.0.2-SA200626P1",
+      "date": "2026-06-20",
+      "changes": [
+        {
+          "type": "feature",
+          "description": "Added Audio Streaming (Time-to-First-Byte) for instant playback of generated sentences."
+        },
+        {
+          "type": "feature",
+          "description": "Added Advanced Audio FX Panel with Studio Quality Presets (EQ, Reverb, Denoise)."
+        },
+        {
+          "type": "feature",
+          "description": "Added Batch Generation Mode with collapsible folder grouping in the History Sidebar."
+        },
+        {
+          "type": "improvement",
+          "description": "Implemented intelligent sentence-level text chunking for reliable long-form TTS generation."
+        },
+        {
+          "type": "improvement",
+          "description": "Added dynamic INT8 Model Quantization to further reduce memory footprint and increase CPU speed."
+        },
+        {
+          "type": "feature",
+          "description": "Added persistent local storage using IndexedDB to save audio history across browser restarts."
+        },
+        {
+          "type": "feature",
+          "description": "Added real-time CPU and RAM telemetry badges to the generated audio history cards."
+        },
+        {
+          "type": "improvement",
+          "description": "Refined the Studio Quality FX preset to a gentler mastering chain for a more natural AI voice."
+        },
+        {
+          "type": "improvement",
+          "description": "Renamed INT8 Quantization to 'Low RAM Mode' to better reflect its true impact on CPU speed."
+        },
+        {
+          "type": "bugfix",
+          "description": "Patched severe OS freezing during backend startup by disabling Hugging Face accelerate and streaming weights directly to RAM."
+        },
+        {
+          "type": "bugfix",
+          "description": "Fixed a rogue React empty src warning that caused the browser to redundantly download the root webpage."
+        }
+      ]
+    },
+    {
       "version": "1.0.1-F190626P1",
       "date": "2026-06-19",
       "changes": [

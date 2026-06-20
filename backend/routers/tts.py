@@ -1,10 +1,14 @@
-from fastapi import APIRouter, Form, HTTPException, File, UploadFile
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, Form, HTTPException, File, UploadFile, BackgroundTasks
+from fastapi.responses import FileResponse, StreamingResponse
 import os
 import uuid
 import gc
+import json
 
-from services.audio_processor import process_custom_voice, process_voice_clone
+from services.audio_processor import (
+    process_custom_voice, process_custom_voice_stream,
+    process_voice_clone, process_voice_clone_stream
+)
 from services.transcription import transcriber
 
 router = APIRouter(tags=["TTS Generation"])
@@ -15,31 +19,32 @@ def generate_custom_voice(
     language: str = Form("Auto"),
     speaker: str = Form("Vivian"),
     instruct: str = Form(""),
-    audio_format: str = Form("wav")
+    preset: bool = Form(False),
+    reverb: float = Form(0.0),
+    denoise: float = Form(0.0),
+    eq: float = Form(0.0)
 ):
-    print(f"Generating voice for: {text[:50]}... (CPU)")
+    print(f"Generating voice stream for: {text[:50]}... (CPU)")
     try:
-        valid_formats = ["wav", "flac", "ogg"]
-        fmt = audio_format.lower() if audio_format.lower() in valid_formats else "wav"
-        
-        output_path = process_custom_voice(text, language, speaker, instruct, fmt)
-        
-        media_types = {"wav": "audio/wav", "flac": "audio/flac", "ogg": "audio/ogg"}
-        return FileResponse(output_path, media_type=media_types[fmt])
+        generator = process_custom_voice_stream(
+            text, language, speaker, instruct, preset, reverb, denoise, eq
+        )
+        return StreamingResponse(generator, media_type="text/event-stream")
     except Exception as e:
-        print(f"Error during generation: {e}")
+        print(f"Error during streaming generation: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        gc.collect()
 
 @router.post("/generate_voice_clone")
 def generate_voice_clone(
     text: str = Form(...),
     ref_audio: UploadFile = File(None),
     ref_text: str = Form(""),
-    audio_format: str = Form("wav"),
     x_vector_only_mode: bool = Form(False),
-    saved_voice_id: str = Form("")
+    saved_voice_id: str = Form(""),
+    preset: bool = Form(False),
+    reverb: float = Form(0.0),
+    denoise: float = Form(0.0),
+    eq: float = Form(0.0)
 ):
     temp_ref_path = None
     if ref_audio is not None and not saved_voice_id:
@@ -48,27 +53,91 @@ def generate_voice_clone(
             f.write(ref_audio.file.read())
         
     try:
-        valid_formats = ["wav", "flac", "ogg"]
-        fmt = audio_format.lower() if audio_format.lower() in valid_formats else "wav"
-        
-        output_path = process_voice_clone(
-            text=text, 
-            temp_ref_path=temp_ref_path, 
-            ref_text=ref_text, 
-            fmt=fmt,
-            x_vector_only_mode=x_vector_only_mode,
-            saved_voice_id=saved_voice_id if saved_voice_id else None
+        generator = process_voice_clone_stream(
+            text, temp_ref_path, ref_text, x_vector_only_mode, saved_voice_id, preset, reverb, denoise, eq
         )
-        
-        media_types = {"wav": "audio/wav", "flac": "audio/flac", "ogg": "audio/ogg"}
-        return FileResponse(output_path, media_type=media_types[fmt])
+        # Note: temp_ref_path deletion should ideally happen after the stream ends.
+        # But for simplicity in generators, it might be left in outputs/ or cleaned up later.
+        return StreamingResponse(generator, media_type="text/event-stream")
     except Exception as e:
-        print(f"Error during cloning: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
         if temp_ref_path and os.path.exists(temp_ref_path):
             os.remove(temp_ref_path)
-        gc.collect()
+        print(f"Error during streaming cloning: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+def background_batch_process(batch_id: str, texts: list, clone_mode: bool, kwargs: dict):
+    for text in texts:
+        try:
+            if clone_mode:
+                process_voice_clone(text=text, batch_id=batch_id, **kwargs)
+            else:
+                process_custom_voice(text=text, batch_id=batch_id, **kwargs)
+        except Exception as e:
+            print(f"Batch generation error on text '{text[:20]}': {e}")
+            continue
+        finally:
+            gc.collect()
+
+@router.post("/batch_generate")
+def batch_generate(
+    background_tasks: BackgroundTasks,
+    texts: str = Form(...), # JSON string list of texts
+    clone_mode: bool = Form(False),
+    
+    # Custom Voice args
+    language: str = Form("Auto"),
+    speaker: str = Form("Vivian"),
+    instruct: str = Form(""),
+    
+    # Clone args
+    ref_audio: UploadFile = File(None),
+    ref_text: str = Form(""),
+    x_vector_only_mode: bool = Form(False),
+    saved_voice_id: str = Form(""),
+    
+    # Shared args
+    audio_format: str = Form("wav"),
+    preset: bool = Form(False),
+    reverb: float = Form(0.0),
+    denoise: float = Form(0.0),
+    eq: float = Form(0.0)
+):
+    text_list = json.loads(texts)
+    batch_id = f"batch_{uuid.uuid4().hex[:8]}"
+    
+    temp_ref_path = None
+    if clone_mode and ref_audio is not None and not saved_voice_id:
+        temp_ref_path = f"outputs/temp_ref_batch_{uuid.uuid4()}.wav"
+        with open(temp_ref_path, "wb") as f:
+            f.write(ref_audio.file.read())
+            
+    valid_formats = ["wav", "flac", "ogg"]
+    fmt = audio_format.lower() if audio_format.lower() in valid_formats else "wav"
+
+    kwargs = {
+        "fmt": fmt,
+        "preset": preset,
+        "reverb": reverb,
+        "denoise": denoise,
+        "eq": eq
+    }
+    
+    if clone_mode:
+        kwargs.update({
+            "temp_ref_path": temp_ref_path,
+            "ref_text": ref_text,
+            "x_vector_only_mode": x_vector_only_mode,
+            "saved_voice_id": saved_voice_id if saved_voice_id else None
+        })
+    else:
+        kwargs.update({
+            "language": language,
+            "speaker": speaker,
+            "instruct": instruct
+        })
+        
+    background_tasks.add_task(background_batch_process, batch_id, text_list, clone_mode, kwargs)
+    return {"status": "processing", "batch_id": batch_id, "items": len(text_list)}
 
 @router.post("/transcribe")
 def transcribe_audio(audio: UploadFile = File(...)):

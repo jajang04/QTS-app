@@ -9,31 +9,64 @@ export const apiClient = {
     return res.json();
   },
 
-  switchModel: async (modelType: 'Base' | 'CustomVoice'): Promise<void> => {
+  switchModel: async (modelType: 'Base' | 'CustomVoice', quantize: boolean = false): Promise<void> => {
     const res = await fetch(`${API_BASE}/switch_model`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model_type: modelType })
+      body: JSON.stringify({ model_type: modelType, quantize })
     });
     if (!res.ok) throw new Error('Failed to switch AI model in backend.');
   },
 
-  generateCustomVoice: async (formData: FormData): Promise<Blob> => {
-    const res = await fetch(`${API_BASE}/generate_custom_voice`, {
+  generateVoiceStream: async (
+    endpoint: string, 
+    formData: FormData, 
+    onChunk: (b64Audio: string, isLast: boolean, ram?: string, cpu?: string) => void
+  ): Promise<void> => {
+    const response = await fetch(`${API_BASE}/${endpoint}`, {
       method: 'POST',
       body: formData,
     });
-    if (!res.ok) throw new Error(`Generation failed: ${res.statusText}`);
-    return res.blob();
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(errorText || 'Generation failed');
+    }
+
+    const reader = response.body?.getReader();
+    const decoder = new TextDecoder('utf-8');
+
+    if (reader) {
+      let done = false;
+      let buffer = '';
+      
+      while (!done) {
+        const { value, done: readerDone } = await reader.read();
+        done = readerDone;
+        if (value) {
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          
+          for (let i = 0; i < lines.length - 1; i++) {
+            const line = lines[i].trim();
+            if (line.startsWith('data: ')) {
+              const data = JSON.parse(line.substring(6));
+              onChunk(data.audio, data.is_last, data.ram, data.cpu);
+            }
+          }
+          buffer = lines[lines.length - 1];
+        }
+      }
+    }
   },
 
-  generateVoiceClone: async (formData: FormData): Promise<Blob> => {
-    const res = await fetch(`${API_BASE}/generate_voice_clone`, {
+  generateBatch: async (formData: FormData): Promise<{batch_id: string}> => {
+    const res = await fetch(`${API_BASE}/batch_generate`, {
       method: 'POST',
       body: formData,
     });
-    if (!res.ok) throw new Error(`Generation failed: ${res.statusText}`);
-    return res.blob();
+    if (!res.ok) throw new Error('Batch generation failed');
+    return res.json();
   },
 
   transcribeAudio: async (formData: FormData): Promise<{ text: string }> => {

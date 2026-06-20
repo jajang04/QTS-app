@@ -32,3 +32,19 @@ What we have accomplished from the start of the project until now:
    - Replaced it with a hyper-optimized "Obsidian & Silk" lightweight minimal aesthetic featuring a crisp `#0A0A0A` background, pastel accents, and satisfying spring-physics bouncy button animations.
    - Added history deletion functionality (trash can icons).
    - Added UX polish: Character selection now automatically switches to the character's respective native language.
+
+Saturday, 20 June 2026 Part 1 (SA200626P1) :
+7. Major Enhancements (Streaming, Batch, FX, Chunking, Quantization):
+   - Implemented dynamic INT8 quantization for the Qwen-TTS models to further optimize CPU memory footprint.
+   - Refactored text generation to chunk inputs by sentences using `nltk.sent_tokenize`.
+   - Introduced HTTP Audio Streaming (Server-Sent Events) yielding Time-to-First-Byte audio chunks on the frontend.
+   - Integrated `pedalboard` for an advanced Post-Processing FX Pipeline with presets and manual sliders (Reverb, Denoise, EQ).
+   - Added a Background Tasks based batch generation queue, modifying the History Sidebar to group outputs into collapsible folders by batch_id.
+
+8. Hardware Telemetry & UX Fixes:
+   - Implemented IndexedDB for permanent local storage of audio blobs, preventing history loss on browser restarts.
+   - Added real-time tracking of RAM and peak CPU usage (`psutil`) during SSE generation, displaying as UI badges.
+   - Refined the Studio Preset FX (from aggressive EQ/Gate to a smooth Compressor/Limiter chain) based on feedback.
+   - Re-labeled "Fast Mode" to "Low RAM Mode" to avoid user confusion about PyTorch's dynamic quantization CPU penalty.
+   - Eliminated catastrophic OS freezing during startup by removing `device_map="cpu"` and injecting `low_cpu_mem_usage=True` to bypass `accelerate` overhead.
+   - Fixed a React empty `src` warning by conditionally passing `undefined` to audio elements during IndexedDB loading.
