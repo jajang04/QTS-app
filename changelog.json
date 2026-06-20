@@ -1,7 +1,7 @@
 {
   "releases": [
     {
-      "version": "1.0.2-SA200626P1",
+      "version": "1.0.2-SA200626P2",
       "date": "2026-06-20",
       "changes": [
         {
@@ -17,14 +17,6 @@
           "description": "Added Batch Generation Mode with collapsible folder grouping in the History Sidebar."
         },
         {
-          "type": "improvement",
-          "description": "Implemented intelligent sentence-level text chunking for reliable long-form TTS generation."
-        },
-        {
-          "type": "improvement",
-          "description": "Added dynamic INT8 Model Quantization to further reduce memory footprint and increase CPU speed."
-        },
-        {
           "type": "feature",
           "description": "Added persistent local storage using IndexedDB to save audio history across browser restarts."
         },
@@ -33,12 +25,56 @@
           "description": "Added real-time CPU and RAM telemetry badges to the generated audio history cards."
         },
         {
+          "type": "feature",
+          "description": "Built a 'Saved Profiles' system to persist favorite Custom Voice combinations directly to localStorage."
+        },
+        {
+          "type": "feature",
+          "description": "Created a 'Merge & Download Batch' tool that seamlessly concatenates batch generations into a single continuous WAV file."
+        },
+        {
+          "type": "feature",
+          "description": "Integrated an Aurora-themed real-time reactive Audio Waveform visualizer driven by the Web Audio API."
+        },
+        {
+          "type": "improvement",
+          "description": "Changed PyTorch model dtype to bfloat16 to cut memory footprint in half and significantly increase generation speed."
+        },
+        {
+          "type": "improvement",
+          "description": "Completely removed the INT8 Quantization 'Low RAM Mode' toggle after identifying its severe performance penalty."
+        },
+        {
+          "type": "improvement",
+          "description": "Completely refactored Batch Generation architecture from backend background tasks to a frontend async loop, providing live generation progress feedback in the UI."
+        },
+        {
+          "type": "improvement",
+          "description": "Implemented intelligent sentence-level text chunking for reliable long-form TTS generation."
+        },
+        {
           "type": "improvement",
           "description": "Refined the Studio Quality FX preset to a gentler mastering chain for a more natural AI voice."
         },
         {
           "type": "improvement",
-          "description": "Renamed INT8 Quantization to 'Low RAM Mode' to better reflect its true impact on CPU speed."
+          "description": "Replaced timestamp-based Batch IDs with clean 6-character random hex strings and elegantly parsed legacy unix timestamps."
+        },
+        {
+          "type": "improvement",
+          "description": "Redesigned History Sidebar batch folders with distinct inset grouping and threaded indentation for better visual hierarchy."
+        },
+        {
+          "type": "improvement",
+          "description": "Polished the entire layout to a strict single-screen UI architecture by disabling global scrolling and introducing custom sleek global webkit scrollbars."
+        },
+        {
+          "type": "improvement",
+          "description": "Re-engineered the estimated time-to-completion algorithm with a dynamic multiplier that recalculates based on the processing overhead of the selected output codec (WAV vs FLAC vs OGG)."
+        },
+        {
+          "type": "bugfix",
+          "description": "Fixed a fatal backend crash that occurred when activating the Studio Quality Audio Preset."
         },
         {
           "type": "bugfix",
@@ -47,6 +83,18 @@
         {
           "type": "bugfix",
           "description": "Fixed a rogue React empty src warning that caused the browser to redundantly download the root webpage."
+        },
+        {
+          "type": "bugfix",
+          "description": "Fixed a fatal 'echoing/repeating' audio artifact in Voice Clone mode by disabling backend chunking, allowing a single seamless generation without repeated reference audio bleeding."
+        },
+        {
+          "type": "bugfix",
+          "description": "Tied the Aurora Audio Visualizer rendering to a strict `isPlaying` state monitor hooked directly into the AudioQueue to prevent empty boxes from persisting on screen."
+        },
+        {
+          "type": "bugfix",
+          "description": "Fixed UI bug where the Advanced FX button appeared broken while the Studio Quality Preset was enabled, by dynamically disabling it."
         }
       ]
     },

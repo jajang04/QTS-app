@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Volume2, Loader2, Download, Settings2, FileText } from 'lucide-react';
 import { CustomVoiceForm } from './CustomVoiceForm';
 import { VoiceCloneForm } from './VoiceCloneForm';
+import { AudioVisualizer } from './AudioVisualizer';
 import { useToast } from './ToastProvider';
 import { apiClient } from '../services/apiClient';
 import { useTTSApi } from '../hooks/useTTSApi';
@@ -14,7 +15,7 @@ interface Props {
 
 export const TTSGeneratorCard = React.memo(({ speakers, addToHistory }: Props) => {
   const { addToast } = useToast();
-  const { loading, audioUrl, streamingChunks, generateVoice } = useTTSApi(addToHistory);
+  const { loading, batchProgress, batchTotal, audioUrl, streamingChunks, generateVoice, stopPlayback, analyser, isPlaying } = useTTSApi(addToHistory);
 
   const [text, setText] = useState('');
   const [format, setFormat] = useState('wav');
@@ -39,8 +40,6 @@ export const TTSGeneratorCard = React.memo(({ speakers, addToHistory }: Props) =
   const [denoise, setDenoise] = useState(0);
   const [eq, setEq] = useState(0);
 
-  // Quantization State
-  const [quantize, setQuantize] = useState(false);
 
   const [modelSwitching, setModelSwitching] = useState(false);
   const [switchProgress, setSwitchProgress] = useState(0);
@@ -61,7 +60,18 @@ export const TTSGeneratorCard = React.memo(({ speakers, addToHistory }: Props) =
     };
   }, [loading]);
 
-  const estimatedTotal = Math.max(2, Math.ceil(text.length * 0.35));
+  const wordCount = text.trim() ? text.trim().split(/\s+/).length : 0;
+  
+  const getFormatMultiplier = () => {
+    switch (format) {
+      case 'flac': return 4.2;
+      case 'ogg': return 3.8;
+      case 'wav':
+      default: return 2.7;
+    }
+  };
+  
+  const estimatedTotal = Math.round(wordCount * getFormatMultiplier());
 
   useEffect(() => {
     let interval: ReturnType<typeof setInterval>;
@@ -85,9 +95,9 @@ export const TTSGeneratorCard = React.memo(({ speakers, addToHistory }: Props) =
     if (tab === activeTab && !forceReload) return;
     setModelSwitching(true);
     try {
-      await apiClient.switchModel(tab === 'custom' ? 'CustomVoice' : 'Base', quantize);
+      await apiClient.switchModel(tab === 'custom' ? 'CustomVoice' : 'Base');
       if (tab !== activeTab) setActiveTab(tab);
-      addToast(`Switched to ${tab === 'custom' ? 'Custom Voice' : 'Voice Clone'} mode ${quantize ? '(Low RAM)' : ''}`, 'success');
+      addToast(`Switched to ${tab === 'custom' ? 'Custom Voice' : 'Voice Clone'} mode`, 'success');
     } catch (err: any) {
       addToast(err.message || 'Could not switch model. Make sure backend is running.', 'error');
     } finally {
@@ -112,23 +122,11 @@ export const TTSGeneratorCard = React.memo(({ speakers, addToHistory }: Props) =
       reverb,
       denoise,
       eq,
-      batchMode,
-      quantize
+      batchMode
     });
   };
 
-  // Create temporary URL for currently streamed chunks
-  const [tempStreamUrl, setTempStreamUrl] = useState<string | null>(null);
-  
-  useEffect(() => {
-    if (streamingChunks.length > 0 && !audioUrl) {
-      // Fast hack to make streaming chunks playable: convert raw PCM or WAV segments.
-      // We rely on useTTSApi generating proper concatenated wav when done.
-      // For real-time playback, a MediaSource API is best, but to stay simple we show loading text 
-      // or we can play chunks using AudioContext. Since requirements specify SSE, let's just 
-      // indicate streaming progress visually.
-    }
-  }, [streamingChunks, audioUrl]);
+  // Removed old tempStreamUrl hack; queue playback is now handled natively inside useTTSApi
 
   return (
     <div className="card">
@@ -150,22 +148,6 @@ export const TTSGeneratorCard = React.memo(({ speakers, addToHistory }: Props) =
           style={{ flex: 1 }}
         >
           Voice Clone
-        </button>
-      </div>
-
-      <div className="card" style={{ padding: '0.8rem 1rem', marginBottom: '1.5rem', background: 'rgba(255,255,255,0.03)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: 0, cursor: 'pointer', fontSize: '0.9rem' }}>
-          <input type="checkbox" checked={quantize} onChange={e => setQuantize(e.target.checked)} disabled={modelSwitching} />
-          ⚡ Low RAM Mode (INT8 Quantization - Less RAM, Slower CPU)
-        </label>
-        <button 
-          type="button" 
-          className="btn btn-secondary" 
-          style={{ padding: '4px 12px', fontSize: '0.8rem' }}
-          onClick={() => handleTabSwitch(activeTab, true)}
-          disabled={modelSwitching}
-        >
-          Apply & Reload Model
         </button>
       </div>
 
@@ -203,6 +185,14 @@ export const TTSGeneratorCard = React.memo(({ speakers, addToHistory }: Props) =
             rows={batchMode ? 8 : 4}
             required
           />
+          {(() => {
+            const estStr = estimatedTotal < 60 ? `${estimatedTotal}s` : `${Math.floor(estimatedTotal/60)}m ${estimatedTotal%60}s`;
+            return (
+              <div style={{ display: 'flex', justifyContent: 'flex-end', fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                <span>{wordCount} words {wordCount > 0 ? `• Est. time: ~${estStr}` : ''}</span>
+              </div>
+            );
+          })()}
         </div>
 
         {activeTab === 'custom' ? (
@@ -243,8 +233,10 @@ export const TTSGeneratorCard = React.memo(({ speakers, addToHistory }: Props) =
             <button 
               type="button" 
               className="btn btn-secondary" 
-              style={{ padding: '4px 8px', fontSize: '0.8rem', marginTop: '4px' }}
+              style={{ padding: '4px 8px', fontSize: '0.8rem', marginTop: '4px', opacity: preset ? 0.5 : 1, cursor: preset ? 'not-allowed' : 'pointer' }}
               onClick={() => setShowAdvancedFx(!showAdvancedFx)}
+              disabled={preset}
+              title={preset ? "Advanced FX disabled when Studio Preset is active" : ""}
             >
               <Settings2 size={14} style={{ marginRight: '4px' }} />
               Advanced FX
@@ -276,12 +268,19 @@ export const TTSGeneratorCard = React.memo(({ speakers, addToHistory }: Props) =
 
         <button type="submit" className="btn" disabled={loading || modelSwitching || !text.trim()}>
           {loading ? (
-            <>
-              <Loader2 className="spinner" />
-              {streamingChunks.length > 0 
-                ? `Streaming... (${streamingChunks.length} chunks) | ${elapsedSeconds}s / ~${estimatedTotal}s` 
-                : `Generating... | ${elapsedSeconds}s / ~${estimatedTotal}s`}
-            </>
+            batchMode ? (
+              <>
+                <Loader2 className="spinner" />
+                Generating Batch: {batchProgress} / {batchTotal}
+              </>
+            ) : (
+              <>
+                <Loader2 className="spinner" />
+                {streamingChunks.length > 0 
+                  ? `Streaming... (${streamingChunks.length} chunks) | ${elapsedSeconds}s / ~${estimatedTotal}s` 
+                  : `Generating... | ${elapsedSeconds}s / ~${estimatedTotal}s`}
+              </>
+            )
           ) : batchMode ? (
             <>
               <FileText size={20} />
@@ -296,10 +295,14 @@ export const TTSGeneratorCard = React.memo(({ speakers, addToHistory }: Props) =
         </button>
       </form>
 
+      {analyser && isPlaying && (
+        <AudioVisualizer analyser={analyser} />
+      )}
+
       {audioUrl && !loading && !batchMode && (
         <div className="audio-player-container">
           <h3>Result</h3>
-          <audio controls src={audioUrl || undefined} autoPlay />
+          <audio controls src={audioUrl || undefined} autoPlay onPlay={stopPlayback} />
           <a 
             href={audioUrl} 
             download={`qwen_tts_output.${format}`}

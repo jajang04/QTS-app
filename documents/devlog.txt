@@ -48,3 +48,22 @@ Saturday, 20 June 2026 Part 1 (SA200626P1) :
    - Re-labeled "Fast Mode" to "Low RAM Mode" to avoid user confusion about PyTorch's dynamic quantization CPU penalty.
    - Eliminated catastrophic OS freezing during startup by removing `device_map="cpu"` and injecting `low_cpu_mem_usage=True` to bypass `accelerate` overhead.
    - Fixed a React empty `src` warning by conditionally passing `undefined` to audio elements during IndexedDB loading.
+
+Saturday, 20 June 2026 Part 2 (SA200626P2) :
+9. CPU Optimization (Speed & Memory):
+   - Changed PyTorch model loading dtype from float32 to bfloat16 to halve memory footprint and significantly increase inference speed without any CPU overhead.
+   - Reverted INT8 dynamic quantization default back to False. While INT8 saves RAM, the CPU casting overhead drastically slows down generation on basic Intel architectures. The "Low RAM Mode" toggle in the frontend will remain the only way to activate it.
+   - Fixed a crash during startup ("cannot pickle 'dict_keys' object") by correctly applying dynamic quantization to the inner PyTorch `model.model` rather than the HuggingFace wrapper object when the frontend toggle is used.
+   - Completely stripped out the INT8 "Low RAM Mode" toggle entirely after determining its performance penalty was too severe for practical use.
+   - Fixed a fatal backend crash that would trigger when selecting the Studio Quality Preset (due to missing Compressor and Limiter imports from pedalboard).
+
+10. Premium UX Features:
+   - Built a "Saved Profiles" feature that lets users save and load favorite combinations of Speaker, Language, and Instructions directly to localStorage.
+   - Created a "Merge & Download Batch" tool in the History Sidebar that fetches individual blob URLs and cleanly concatenates their WAV arrays into a single continuous audio file.
+   - Refactored `AudioQueue` to natively route through Web Audio API's `AudioContext` and exposed an `AnalyserNode` to drive a real-time reactive `AudioVisualizer` waveform during playback.
+   - Completely refactored the Batch Generation architecture: Moved processing out of backend background tasks and directly into a frontend async loop, allowing the UI to instantly populate the History Sidebar and provide live `Generating 2 of 5` progress feedback.
+   - Replaced timestamp-based Batch IDs with clean 6-character random hex strings and styled the History Sidebar to visually distinguish batch folders using inset grouping and threaded indentation.
+   - Fixed a fatal "echoing/repeating" audio artifact in Voice Clone mode by disabling sentence-chunking on the backend, allowing Qwen to execute a single seamless generation without repeated reference audio bleeding.
+   - Tied the Aurora Audio Visualizer rendering to a strict `isPlaying` state monitor hooked directly into the `AudioQueue` to prevent empty boxes from persisting on screen.
+   - Re-engineered the estimated time-to-completion algorithm with a dynamic multiplier that recalculates based on the processing overhead of the selected output codec (WAV vs FLAC vs OGG).
+   - Polished the entire layout to a strict single-screen UI architecture by disabling global body scrolling, introducing independent column-based `overflow-y` internal scrolling, and designing a custom sleek global scrollbar to replace the browser default.

@@ -26,13 +26,12 @@ body {
   font-family: 'Outfit', sans-serif;
   background-color: var(--bg-obsidian);
   color: var(--text-primary);
-  min-height: 100vh;
+  height: 100vh;
   display: flex;
   justify-content: center;
   align-items: center;
   position: relative;
-  overflow-x: hidden;
-  overflow-y: auto;
+  overflow: hidden;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -58,9 +57,10 @@ body::before {
   align-items: center;
   width: 100%;
   max-width: 1200px;
+  height: 100vh;
   margin: 0 auto;
-  gap: 3rem;
-  padding: 3rem 2rem;
+  gap: 1.5rem;
+  padding: 1.5rem 2rem;
   z-index: 1;
   position: relative;
   animation: fadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1);
@@ -79,23 +79,27 @@ body::before {
 .dashboard-layout {
   display: flex;
   flex-direction: row;
-  align-items: flex-start;
+  align-items: stretch;
   justify-content: center;
   gap: 2rem;
   width: 100%;
+  flex: 1;
+  min-height: 0; /* Important for flex child scrolling */
 }
 
 .container {
   flex: 1.2;
   min-width: 320px;
   max-width: 700px;
+  overflow-y: auto;
+  padding-right: 10px; /* Space for scrollbar */
 }
 
 .app-title {
   text-align: center;
-  font-size: 4rem;
+  font-size: 2.8rem;
   font-weight: 700;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.2rem;
   letter-spacing: -0.04em;
   color: var(--text-primary);
 }
@@ -113,7 +117,7 @@ body::before {
   background: var(--surface-primary);
   border: 1px solid var(--border-subtle);
   border-radius: 16px;
-  padding: 2.5rem;
+  padding: 1.5rem;
   transition: border-color 0.3s ease;
 }
 
@@ -123,7 +127,7 @@ body::before {
 
 /* Snappy Inputs */
 .form-group {
-  margin-bottom: 1.8rem;
+  margin-bottom: 1.2rem;
 }
 
 .form-group label {
@@ -137,12 +141,12 @@ body::before {
 
 .form-control {
   width: 100%;
-  padding: 1rem 1.2rem;
+  padding: 0.8rem 1rem;
   background: var(--surface-secondary);
   border: 1px solid var(--border-subtle);
   border-radius: 10px;
   color: var(--text-primary);
-  font-size: 1rem;
+  font-size: 0.95rem;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   box-sizing: border-box;
 }
@@ -159,8 +163,8 @@ body::before {
 
 textarea.form-control {
   resize: vertical;
-  min-height: 120px;
-  line-height: 1.6;
+  min-height: 100px;
+  line-height: 1.5;
 }
 
 /* Spring-physics Buttons */
@@ -244,6 +248,7 @@ textarea.form-control {
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
+  height: 100%;
 }
 
 .history-sidebar h2 {
@@ -260,20 +265,25 @@ textarea.form-control {
   display: grid;
   grid-template-columns: 1fr;
   gap: 1rem;
-  max-height: 75vh;
+  flex: 1;
   overflow-y: auto;
   padding-right: 0.5rem;
+  min-height: 0;
 }
 
-.history-list::-webkit-scrollbar {
-  width: 4px;
+/* Global Custom Scrollbar */
+*::-webkit-scrollbar {
+  width: 6px;
 }
-.history-list::-webkit-scrollbar-track {
+*::-webkit-scrollbar-track {
   background: transparent;
 }
-.history-list::-webkit-scrollbar-thumb {
+*::-webkit-scrollbar-thumb {
   background: var(--border-focus);
   border-radius: 4px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--text-tertiary);
 }
 
 .history-card {

@@ -9,11 +9,11 @@ export const apiClient = {
     return res.json();
   },
 
-  switchModel: async (modelType: 'Base' | 'CustomVoice', quantize: boolean = false): Promise<void> => {
+  switchModel: async (modelType: 'Base' | 'CustomVoice'): Promise<void> => {
     const res = await fetch(`${API_BASE}/switch_model`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model_type: modelType, quantize })
+      body: JSON.stringify({ model_type: modelType })
     });
     if (!res.ok) throw new Error('Failed to switch AI model in backend.');
   },
@@ -58,15 +58,6 @@ export const apiClient = {
         }
       }
     }
-  },
-
-  generateBatch: async (formData: FormData): Promise<{batch_id: string}> => {
-    const res = await fetch(`${API_BASE}/batch_generate`, {
-      method: 'POST',
-      body: formData,
-    });
-    if (!res.ok) throw new Error('Batch generation failed');
-    return res.json();
   },
 
   transcribeAudio: async (formData: FormData): Promise<{ text: string }> => {

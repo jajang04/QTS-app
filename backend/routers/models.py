@@ -7,14 +7,13 @@ router = APIRouter(tags=["Models & Speakers"])
 
 class SwitchModelRequest(BaseModel):
     model_type: str # "CustomVoice" or "Base"
-    quantize: bool = False
 
 @router.post("/switch_model")
 def switch_model(req: SwitchModelRequest):
     if req.model_type not in ["CustomVoice", "Base"]:
         raise HTTPException(status_code=400, detail="Invalid model type.")
     try:
-        model_manager.switch_model(req.model_type, quantize=req.quantize)
+        model_manager.switch_model(req.model_type)
         return {"status": "success", "message": f"Swapped to {req.model_type}"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

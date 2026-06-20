@@ -9,15 +9,15 @@ class ModelManager:
         self.current_model_type = None
         self.lock = Lock()
         
-    def switch_model(self, target_type: str, quantize: bool = False):
+    def switch_model(self, target_type: str):
         with self.lock:
             if self.current_model_type == target_type and self.model is not None:
                 return
                 
-            print(f"Switching model to {target_type} (Quantize: {quantize})...")
+            print(f"Switching model to {target_type}...")
             
             if self.model is not None:
-                del self.model
+                self.model = None
                 gc.collect()
                 
             model_path = "Qwen/Qwen3-TTS-12Hz-0.6B-Base" if target_type == "Base" else "Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice"
@@ -25,15 +25,10 @@ class ModelManager:
             model = Qwen3TTSModel.from_pretrained(
                 model_path,
                 low_cpu_mem_usage=True,
-                dtype=torch.float32,
+                dtype=torch.bfloat16,
+                attn_implementation="sdpa"
             )
             
-            if quantize:
-                print("Applying dynamic INT8 quantization...")
-                model = torch.quantization.quantize_dynamic(
-                    model, {torch.nn.Linear}, dtype=torch.qint8
-                )
-                
             self.model = model
             self.current_model_type = target_type
             print("Model swapped successfully.")

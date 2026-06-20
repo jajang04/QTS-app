@@ -1,22 +1,15 @@
 import { useEffect, useRef } from 'react';
 
 interface Props {
-  stream: MediaStream | null;
+  analyser: AnalyserNode | null;
 }
 
-export function AudioVisualizer({ stream }: Props) {
+export function AudioVisualizer({ analyser }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number>();
 
   useEffect(() => {
-    if (!stream || !canvasRef.current) return;
-
-    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-    const analyser = audioContext.createAnalyser();
-    const source = audioContext.createMediaStreamSource(stream);
-    
-    source.connect(analyser);
-    analyser.fftSize = 256;
+    if (!analyser || !canvasRef.current) return;
     
     const bufferLength = analyser.frequencyBinCount;
     const dataArray = new Uint8Array(bufferLength);
@@ -54,11 +47,10 @@ export function AudioVisualizer({ stream }: Props) {
 
     return () => {
       if (animationRef.current) cancelAnimationFrame(animationRef.current);
-      audioContext.close();
     };
-  }, [stream]);
+  }, [analyser]);
 
-  if (!stream) return null;
+  if (!analyser) return null;
 
   return (
     <div style={{ marginTop: '1rem', width: '100%', height: '60px', background: 'rgba(0,0,0,0.2)', borderRadius: '12px', overflow: 'hidden' }}>

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import type { HistoryItem } from '../types';
 import { useToast } from '../components/ToastProvider';
 import { apiClient } from '../services/apiClient';
@@ -20,7 +20,6 @@ interface GenerationOptions {
   denoise: number;
   eq: number;
   batchMode?: boolean;
-  quantize: boolean;
 }
 
 function base64ToArrayBuffer(base64: string) {
@@ -33,7 +32,7 @@ function base64ToArrayBuffer(base64: string) {
   return bytes;
 }
 
-function concatenateWavs(buffers: Uint8Array[]) {
+export function concatenateWavs(buffers: Uint8Array[]) {
   if (buffers.length === 0) return new Blob();
   if (buffers.length === 1) return new Blob([buffers[0]], { type: 'audio/wav' });
 
@@ -65,11 +64,92 @@ function concatenateWavs(buffers: Uint8Array[]) {
   return new Blob([finalWav], { type: 'audio/wav' });
 }
 
+export class AudioQueue {
+  private queue: Blob[] = [];
+  private isPlaying = false;
+  private audioContext: AudioContext | null = null;
+  public analyser: AnalyserNode | null = null;
+  private currentSource: AudioBufferSourceNode | null = null;
+  public onPlayingChange?: (playing: boolean) => void;
+
+  private setPlaying(playing: boolean) {
+    this.isPlaying = playing;
+    if (this.onPlayingChange) this.onPlayingChange(playing);
+  }
+
+  private initAudio() {
+    if (!this.audioContext) {
+      this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      this.analyser = this.audioContext.createAnalyser();
+      this.analyser.fftSize = 256;
+      this.analyser.connect(this.audioContext.destination);
+    }
+  }
+
+  push(blob: Blob) {
+    this.queue.push(blob);
+    this.playNext();
+  }
+
+  private async playNext() {
+    if (this.isPlaying || this.queue.length === 0) return;
+    this.setPlaying(true);
+    this.initAudio();
+
+    const blob = this.queue.shift()!;
+    try {
+      const arrayBuffer = await blob.arrayBuffer();
+      const audioBuffer = await this.audioContext!.decodeAudioData(arrayBuffer);
+      
+      this.currentSource = this.audioContext!.createBufferSource();
+      this.currentSource.buffer = audioBuffer;
+      this.currentSource.connect(this.analyser!);
+      
+      this.currentSource.onended = () => {
+        this.setPlaying(false);
+        this.currentSource = null;
+        this.playNext();
+      };
+      
+      this.currentSource.start();
+    } catch (e) {
+      console.error("Audio playback error", e);
+      this.setPlaying(false);
+      this.currentSource = null;
+      this.playNext();
+    }
+  }
+
+  stop() {
+    if (this.currentSource) {
+      try { this.currentSource.stop(); } catch(e) {}
+      this.currentSource = null;
+    }
+    this.queue = [];
+    this.setPlaying(false);
+  }
+}
+
 export function useTTSApi(addToHistory: (item: HistoryItem) => void) {
   const [loading, setLoading] = useState(false);
+  const [batchProgress, setBatchProgress] = useState(0);
+  const [batchTotal, setBatchTotal] = useState(0);
   const [streamingChunks, setStreamingChunks] = useState<Uint8Array[]>([]);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
   const { addToast } = useToast();
+  
+  const [audioQueue] = useState(() => {
+    const q = new AudioQueue();
+    q.onPlayingChange = setIsPlaying;
+    return q;
+  });
+  
+  const [analyser, setAnalyser] = useState<AnalyserNode | null>(null);
+
+  const stopPlayback = () => {
+    audioQueue.stop();
+  };
 
   const generateVoice = async (options: GenerationOptions) => {
     if (!options.text.trim()) return;
@@ -88,8 +168,11 @@ export function useTTSApi(addToHistory: (item: HistoryItem) => void) {
     }
 
     setLoading(true);
+    setBatchProgress(0);
+    setBatchTotal(0);
     setAudioUrl(null);
     setStreamingChunks([]);
+    audioQueue.stop(); // Stop any previous playback
 
     const formData = new FormData();
     formData.append('audio_format', options.format);
@@ -116,71 +199,85 @@ export function useTTSApi(addToHistory: (item: HistoryItem) => void) {
       }
     }
 
-    if (options.batchMode) {
-      // Split text by newlines and create JSON array
-      const textList = options.text.split('\n').map(t => t.trim()).filter(t => t);
-      formData.append('texts', JSON.stringify(textList));
-      formData.append('clone_mode', String(options.activeTab === 'clone'));
+    const textList = options.batchMode 
+      ? options.text.split('\n').map(t => t.trim()).filter(t => t)
+      : [options.text];
       
-      try {
-        const res = await apiClient.generateBatch(formData);
-        addToast(`Batch ${res.batch_id} queued! Generating ${res.items} items...`, "success");
-      } catch(err: any) {
-        addToast(err.message || 'Batch generation failed.', "error");
-      } finally {
-        setLoading(false);
-      }
+    if (textList.length === 0) {
+      setLoading(false);
       return;
     }
 
-    formData.append('text', options.text);
+    if (options.batchMode) {
+      setBatchTotal(textList.length);
+    }
+    
+    const batchId = options.batchMode 
+      ? `batch_${Math.random().toString(36).substring(2, 8).toUpperCase()}` 
+      : undefined;
+      
+    const endpoint = options.activeTab === 'custom' ? 'generate_custom_voice' : 'generate_voice_clone';
     
     try {
-      const endpoint = options.activeTab === 'custom' ? 'generate_custom_voice' : 'generate_voice_clone';
-      const chunks: Uint8Array[] = [];
-      const startTime = Date.now();
-      
-      await apiClient.generateVoiceStream(endpoint, formData, async (b64Audio, isLast, ram, cpu) => {
-        const buffer = base64ToArrayBuffer(b64Audio);
-        chunks.push(buffer);
-        setStreamingChunks([...chunks]); // Trigger re-render to play chunk immediately if needed
+      for (let i = 0; i < textList.length; i++) {
+        if (options.batchMode) setBatchProgress(i + 1);
         
-        if (isLast) {
-          const finalBlob = concatenateWavs(chunks);
-          const generationTime = Math.round((Date.now() - startTime) / 1000);
-          const id = Date.now().toString();
+        formData.set('text', textList[i]);
+        const chunks: Uint8Array[] = [];
+        const startTime = Date.now();
+        
+        await apiClient.generateVoiceStream(endpoint, formData, async (b64Audio, isLast, ram, cpu) => {
+          const buffer = base64ToArrayBuffer(b64Audio);
+          chunks.push(buffer);
+          setStreamingChunks([...chunks]); 
           
-          let fxType = '';
-          if (options.preset) fxType = 'Studio Preset';
-          else if (options.reverb > 0 || options.denoise > 0 || options.eq > 0) fxType = 'Custom FX';
+          const blob = new Blob([buffer], { type: 'audio/wav' });
+          audioQueue.push(blob);
+          if (!analyser && audioQueue.analyser) {
+            setAnalyser(audioQueue.analyser);
+          }
+          
+          if (isLast) {
+            const finalBlob = concatenateWavs(chunks);
+            const generationTime = Math.round((Date.now() - startTime) / 1000);
+            const id = Date.now().toString() + i.toString();
+            
+            let fxType = '';
+            if (options.preset) fxType = 'Studio Preset';
+            else if (options.reverb > 0 || options.denoise > 0 || options.eq > 0) fxType = 'Custom FX';
 
-          await saveAudioBlob(id, finalBlob);
-          const url = URL.createObjectURL(finalBlob);
-          setAudioUrl(url);
-          addToHistory({
-            id,
-            text: options.text,
-            speaker: options.activeTab === 'custom' ? options.speaker : 'Clone',
-            format: options.format,
-            audioUrl: url,
-            timestamp: Date.now(),
-            quantize: options.quantize,
-            mode: options.activeTab === 'custom' ? 'Custom Voice' : 'Voice Clone',
-            generationTime,
-            fxType,
-            ramUsage: ram,
-            cpuUsage: cpu
-          });
-          addToast("Voice generated successfully!", "success");
-        }
-      });
-      
+            await saveAudioBlob(id, finalBlob);
+            const url = URL.createObjectURL(finalBlob);
+            
+            if (!options.batchMode) setAudioUrl(url);
+            
+            addToHistory({
+              id,
+              text: textList[i],
+              speaker: options.activeTab === 'custom' ? options.speaker : 'Clone',
+              format: options.format,
+              audioUrl: url,
+              timestamp: Date.now(),
+              mode: options.activeTab === 'custom' ? 'Custom Voice' : 'Voice Clone',
+              generationTime,
+              fxType,
+              ramUsage: ram,
+              cpuUsage: cpu,
+              wordCount: textList[i].trim().split(/\s+/).length,
+              batchId
+            });
+            
+            if (!options.batchMode) addToast("Voice generated successfully!", "success");
+          }
+        });
+      }
+      if (options.batchMode) addToast("Batch generation completed!", "success");
     } catch (err: any) {
-      addToast(err.message || 'An error occurred during generation.', "error");
+      addToast(err.message || 'Generation failed.', 'error');
     } finally {
       setLoading(false);
     }
   };
 
-  return { loading, audioUrl, streamingChunks, generateVoice };
+  return { loading, batchProgress, batchTotal, audioUrl, streamingChunks, generateVoice, stopPlayback, analyser, isPlaying };
 }

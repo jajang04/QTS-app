@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Download, Trash2, Folder, ChevronDown, ChevronRight } from 'lucide-react';
+import { Download, Trash2, Folder, ChevronDown, ChevronRight, Layers } from 'lucide-react';
 import type { HistoryItem } from '../types';
+import { concatenateWavs } from '../hooks/useTTSApi';
 
 interface Props {
   history: HistoryItem[];
@@ -26,15 +27,56 @@ export const HistorySidebar = React.memo(function HistorySidebar({ history, remo
     }
   });
 
+  const [mergingBatch, setMergingBatch] = useState<string | null>(null);
+
+  const mergeBatch = async (batchId: string, items: HistoryItem[]) => {
+    setMergingBatch(batchId);
+    try {
+      const buffers: Uint8Array[] = [];
+      // Fetch all blobs in chronological order (oldest first if array is reverse chronological, wait, the items might be reverse chronological, so reverse it)
+      const sortedItems = [...items].sort((a, b) => a.timestamp - b.timestamp);
+      
+      for (const item of sortedItems) {
+        if (!item.audioUrl) continue;
+        const res = await fetch(item.audioUrl);
+        const arrayBuffer = await res.arrayBuffer();
+        buffers.push(new Uint8Array(arrayBuffer));
+      }
+      
+      const mergedBlob = concatenateWavs(buffers);
+      const url = URL.createObjectURL(mergedBlob);
+      
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `qwen_tts_batch_${batchId.substring(6)}.wav`;
+      a.click();
+      
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+    } catch (err) {
+      console.error("Failed to merge batch", err);
+      alert("Failed to merge batch files.");
+    } finally {
+      setMergingBatch(null);
+    }
+  };
+
+  const formatBatchId = (batchId: string) => {
+    const stripped = batchId.substring(6);
+    if (/^\d{13}$/.test(stripped)) {
+      return new Date(parseInt(stripped)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+    return stripped;
+  };
+
   const renderItem = (item: HistoryItem) => (
     <div key={item.id} className="history-card card">
       <div className="history-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
         <div className="badges-container" style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', flex: 1, marginRight: '12px' }}>
           <span className="badge" style={{ backgroundColor: 'transparent', border: '1px solid var(--aurora-1)', color: 'var(--aurora-1)', fontSize: '0.7rem', padding: '2px 8px' }}>{item.speaker.toUpperCase()}</span>
           {item.mode && <span className="badge" style={{ backgroundColor: 'transparent', border: '1px solid var(--aurora-2)', color: 'var(--aurora-2)', fontSize: '0.7rem', padding: '2px 8px' }}>{item.mode.toUpperCase()}</span>}
-          {item.quantize && <span className="badge" style={{ backgroundColor: '#ff9800', color: '#000', fontSize: '0.7rem', padding: '2px 8px', fontWeight: 700 }}>⚡ LOW RAM</span>}
           {item.fxType && <span className="badge" style={{ backgroundColor: 'transparent', border: '1px solid #4CAF50', color: '#4CAF50', fontSize: '0.7rem', padding: '2px 8px' }}>🎧 {item.fxType.toUpperCase()}</span>}
           {item.generationTime !== undefined && <span className="badge" style={{ backgroundColor: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: 'var(--text-secondary)', fontSize: '0.7rem', padding: '2px 8px' }}>⏱️ {item.generationTime}S</span>}
+          {item.wordCount !== undefined && <span className="badge" style={{ backgroundColor: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: 'var(--text-secondary)', fontSize: '0.7rem', padding: '2px 8px' }}>📝 {item.wordCount}W</span>}
           {item.ramUsage && <span className="badge" style={{ backgroundColor: 'transparent', border: '1px solid #2196F3', color: '#2196F3', fontSize: '0.7rem', padding: '2px 8px' }}>💾 {item.ramUsage}</span>}
           {item.cpuUsage && <span className="badge" style={{ backgroundColor: 'transparent', border: '1px solid #E91E63', color: '#E91E63', fontSize: '0.7rem', padding: '2px 8px' }}>⚙️ {item.cpuUsage}</span>}
         </div>
@@ -75,18 +117,33 @@ export const HistorySidebar = React.memo(function HistorySidebar({ history, remo
         ) : (
           <>
             {Object.entries(batchedItems).map(([batchId, items]) => (
-              <div key={batchId} className="batch-group card" style={{ padding: '0.8rem', marginBottom: '1rem', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>
-                <div 
-                  className="batch-header" 
-                  onClick={() => toggleBatch(batchId)}
-                  style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', fontWeight: 600, color: 'var(--aurora-2)' }}
-                >
-                  {expandedBatches[batchId] ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
-                  <Folder size={16} style={{ margin: '0 8px' }} />
-                  Batch {batchId.substring(6)} ({items.length} items)
+              <div key={batchId} className="batch-group card" style={{ padding: '0.8rem', marginBottom: '1rem', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.03)', borderLeft: '3px solid var(--border-focus)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+                  <div 
+                    className="batch-header" 
+                    onClick={() => toggleBatch(batchId)}
+                    style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', fontWeight: 600, color: 'var(--aurora-2)', flex: 1, minWidth: 0, paddingRight: '12px' }}
+                  >
+                    {expandedBatches[batchId] ? <ChevronDown size={18} style={{ flexShrink: 0 }} /> : <ChevronRight size={18} style={{ flexShrink: 0 }} />}
+                    <Folder size={16} style={{ margin: '0 8px', flexShrink: 0 }} />
+                    <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block' }}>
+                      Batch {formatBatchId(batchId)} ({items.length} items)
+                    </span>
+                  </div>
+                  <button 
+                    type="button" 
+                    className="btn" 
+                    style={{ width: 'auto', padding: '6px 16px', fontSize: '0.75rem', background: 'rgba(255,255,255,0.15)', color: '#ffffff', flexShrink: 0, borderRadius: '8px' }}
+                    onClick={(e) => { e.stopPropagation(); mergeBatch(batchId, items); }}
+                    disabled={mergingBatch === batchId}
+                  >
+                    <Layers size={14} style={{ marginRight: '4px' }} />
+                    {mergingBatch === batchId ? 'Merging...' : 'Merge & Download'}
+                  </button>
                 </div>
                 {expandedBatches[batchId] && (
-                  <div className="batch-items" style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <div className="batch-items" style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.8rem', paddingLeft: '1.2rem', position: 'relative' }}>
+                    <div style={{ position: 'absolute', left: '0.6rem', top: 0, bottom: 0, width: '1px', background: 'rgba(255,255,255,0.06)' }} />
                     {items.map(renderItem)}
                   </div>
                 )}

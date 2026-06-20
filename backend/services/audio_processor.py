@@ -10,7 +10,7 @@ import numpy as np
 import torch
 import soundfile as sf
 import nltk
-from pedalboard import Pedalboard, Reverb, NoiseGate, HighpassFilter, PeakFilter
+from pedalboard import Pedalboard, Reverb, NoiseGate, HighpassFilter, PeakFilter, Compressor, Limiter
 from .model_manager import model_manager
 
 # Ensure NLTK punkt is downloaded
@@ -139,8 +139,6 @@ def process_voice_clone_stream(text: str, temp_ref_path: str, ref_text: str, x_v
     if model is None or model_manager.current_model_type != "Base":
         raise ValueError("Base model not loaded.")
 
-    chunks = chunk_text(text)
-    
     with lock:
         with torch.inference_mode():
             if saved_voice_id:
@@ -150,28 +148,28 @@ def process_voice_clone_stream(text: str, temp_ref_path: str, ref_text: str, x_v
                     raise ValueError("Saved voice not found.")
                 prompt_items = torch.load(load_path, weights_only=False)
             
-            for i, chunk in enumerate(chunks):
-                if saved_voice_id:
-                    wavs, sr = model.generate_voice_clone(text=chunk, voice_clone_prompt=prompt_items)
-                else:
-                    wavs, sr = model.generate_voice_clone(
-                        text=chunk, ref_audio=temp_ref_path, ref_text=ref_text if not x_vector_only_mode else None, x_vector_only_mode=x_vector_only_mode
-                    )
+            if saved_voice_id:
+                wavs, sr = model.generate_voice_clone(text=text, voice_clone_prompt=prompt_items)
+            else:
+                wavs, sr = model.generate_voice_clone(
+                    text=text, ref_audio=temp_ref_path, ref_text=ref_text if not x_vector_only_mode else None, x_vector_only_mode=x_vector_only_mode
+                )
+            
+            final_chunk = apply_fx(wavs[0], sr, preset, reverb, denoise, eq)
+            b64_audio = wav_to_base64(final_chunk, sr)
+            
+            process = psutil.Process(os.getpid())
+            ram_gb = process.memory_info().rss / (1024 ** 3)
+            cpu_percent = psutil.cpu_percent(interval=None)
+            
+            payload = {
+                "audio": b64_audio, 
+                "is_last": True,
+                "ram": f"{ram_gb:.1f} GB",
+                "cpu": f"{cpu_percent}%"
+            }
                 
-                final_chunk = apply_fx(wavs[0], sr, preset, reverb, denoise, eq)
-                b64_audio = wav_to_base64(final_chunk, sr)
-                
-                is_last = (i == len(chunks) - 1)
-                payload = {"audio": b64_audio, "is_last": is_last}
-                
-                if is_last:
-                    process = psutil.Process(os.getpid())
-                    ram_gb = process.memory_info().rss / (1024 ** 3)
-                    cpu_percent = psutil.cpu_percent(interval=None)
-                    payload["ram"] = f"{ram_gb:.1f} GB"
-                    payload["cpu"] = f"{cpu_percent}%"
-                    
-                yield f"data: {json.dumps(payload)}\n\n"
+            yield f"data: {json.dumps(payload)}\n\n"
 
 def process_voice_clone(text: str, temp_ref_path: str, ref_text: str, fmt: str, x_vector_only_mode: bool = False, saved_voice_id: str = None, preset: bool=False, reverb: float=0.0, denoise: float=0.0, eq: float=0.0, batch_id: str=None):
     # Fallback for batch processing
@@ -179,7 +177,6 @@ def process_voice_clone(text: str, temp_ref_path: str, ref_text: str, fmt: str, 
     if model is None or model_manager.current_model_type != "Base":
         raise ValueError("Base model not loaded.")
 
-    chunks = chunk_text(text)
     all_wavs = []
     final_sr = 24000
     
@@ -190,15 +187,14 @@ def process_voice_clone(text: str, temp_ref_path: str, ref_text: str, fmt: str, 
                 load_path = f"outputs/saved_voices/{safe_name}.pt"
                 prompt_items = torch.load(load_path, weights_only=False)
             
-            for chunk in chunks:
-                if saved_voice_id:
-                    wavs, sr = model.generate_voice_clone(text=chunk, voice_clone_prompt=prompt_items)
-                else:
-                    wavs, sr = model.generate_voice_clone(
-                        text=chunk, ref_audio=temp_ref_path, ref_text=ref_text if not x_vector_only_mode else None, x_vector_only_mode=x_vector_only_mode
-                    )
-                all_wavs.append(wavs[0])
-                final_sr = sr
+            if saved_voice_id:
+                wavs, sr = model.generate_voice_clone(text=text, voice_clone_prompt=prompt_items)
+            else:
+                wavs, sr = model.generate_voice_clone(
+                    text=text, ref_audio=temp_ref_path, ref_text=ref_text if not x_vector_only_mode else None, x_vector_only_mode=x_vector_only_mode
+                )
+            all_wavs.append(wavs[0])
+            final_sr = sr
 
     final_wav = np.concatenate(all_wavs, axis=0)
     final_wav = apply_fx(final_wav, final_sr, preset, reverb, denoise, eq)

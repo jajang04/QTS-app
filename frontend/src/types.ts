@@ -11,10 +11,10 @@ export interface HistoryItem {
   audioUrl?: string;
   timestamp: number;
   batchId?: string;
-  quantize?: boolean;
   generationTime?: number;
   mode?: 'Custom Voice' | 'Voice Clone';
   fxType?: string;
   ramUsage?: string;
   cpuUsage?: string;
+  wordCount?: number;
 }
