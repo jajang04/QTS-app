@@ -93,7 +93,7 @@ export function CustomVoiceForm({
             ))}
           </select>
           {selectedProfileId && (
-            <button type="button" className="btn" style={{ padding: '8px', background: '#E91E63' }} onClick={() => deleteProfile(selectedProfileId)}>
+            <button type="button" className="btn" style={{ padding: '8px', background: '#E91E63', width: 'auto', flexShrink: 0 }} onClick={() => deleteProfile(selectedProfileId)}>
               🗑️
             </button>
           )}

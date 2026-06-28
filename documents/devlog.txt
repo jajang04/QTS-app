@@ -67,3 +67,11 @@ Saturday, 20 June 2026 Part 2 (SA200626P2) :
    - Tied the Aurora Audio Visualizer rendering to a strict `isPlaying` state monitor hooked directly into the `AudioQueue` to prevent empty boxes from persisting on screen.
    - Re-engineered the estimated time-to-completion algorithm with a dynamic multiplier that recalculates based on the processing overhead of the selected output codec (WAV vs FLAC vs OGG).
    - Polished the entire layout to a strict single-screen UI architecture by disabling global body scrolling, introducing independent column-based `overflow-y` internal scrolling, and designing a custom sleek global scrollbar to replace the browser default.
+
+Sunday, 28 June 2026 Part 1 (SU280626P1) :
+11. Features & Maintenance:
+   - Added a "Download Batch as ZIP" button in the History Sidebar utilizing `jszip` to allow users to quickly compress and download all generated `.wav` files within a batch directly from the browser.
+   - Refined audio file naming logic across individual and batch downloads to use the first 30 characters of the generation text combined with the speaker name.
+   - Fixed a UI flexbox layout anomaly where the "Delete Saved Profile" button in `CustomVoiceForm` improperly expanded to fill the container width.
+   - Refactored the History Sidebar batch action buttons ("ZIP" and "Merge") into compact, icon-only tooltips to prevent visual overflow in narrow screen layouts.
+   - Created the `docs/` folder to adhere to the strict Knowledge Management rules, adding `features.md` to document the History Sidebar capabilities.

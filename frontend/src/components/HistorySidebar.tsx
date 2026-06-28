@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Download, Trash2, Folder, ChevronDown, ChevronRight, Layers } from 'lucide-react';
+import { Download, Trash2, Folder, ChevronDown, ChevronRight, Layers, FileArchive } from 'lucide-react';
+import JSZip from 'jszip';
 import type { HistoryItem } from '../types';
 import { concatenateWavs } from '../hooks/useTTSApi';
 
@@ -28,6 +29,51 @@ export const HistorySidebar = React.memo(function HistorySidebar({ history, remo
   });
 
   const [mergingBatch, setMergingBatch] = useState<string | null>(null);
+  const [zippingBatch, setZippingBatch] = useState<string | null>(null);
+
+  const getFileName = (item: HistoryItem, prefix: string = '') => {
+    let safeText = item.text.substring(0, 30).replace(/[^a-z0-9]/gi, '_').toLowerCase();
+    // Trim trailing underscores
+    safeText = safeText.replace(/_+$/, '');
+    const suffix = item.speaker.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+    return `${prefix}${safeText || 'audio'}_${suffix}.${item.format}`;
+  };
+
+  const downloadBatchAsZip = async (batchId: string, items: HistoryItem[]) => {
+    setZippingBatch(batchId);
+    try {
+      const zip = new JSZip();
+      
+      const sortedItems = [...items].sort((a, b) => a.timestamp - b.timestamp);
+      
+      for (let i = 0; i < sortedItems.length; i++) {
+        const item = sortedItems[i];
+        if (!item.audioUrl) continue;
+        const res = await fetch(item.audioUrl);
+        const arrayBuffer = await res.arrayBuffer();
+        
+        const num = (i + 1).toString().padStart(3, '0');
+        const filename = getFileName(item, `${num}_`);
+        
+        zip.file(filename, arrayBuffer);
+      }
+      
+      const zipBlob = await zip.generateAsync({ type: "blob" });
+      const url = URL.createObjectURL(zipBlob);
+      
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `qwen_tts_batch_${batchId.substring(6)}.zip`;
+      a.click();
+      
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+    } catch (err) {
+      console.error("Failed to zip batch", err);
+      alert("Failed to zip batch files.");
+    } finally {
+      setZippingBatch(null);
+    }
+  };
 
   const mergeBatch = async (batchId: string, items: HistoryItem[]) => {
     setMergingBatch(batchId);
@@ -98,7 +144,7 @@ export const HistorySidebar = React.memo(function HistorySidebar({ history, remo
       <audio controls src={item.audioUrl || undefined} className="history-audio" />
       <a 
         href={item.audioUrl} 
-        download={`qwen_tts_${item.timestamp}.${item.format}`}
+        download={getFileName(item)}
         className="btn btn-secondary"
         style={{ marginTop: '0.8rem', padding: '0.6rem', fontSize: '0.9rem' }}
       >
@@ -130,16 +176,28 @@ export const HistorySidebar = React.memo(function HistorySidebar({ history, remo
                       Batch {formatBatchId(batchId)} ({items.length} items)
                     </span>
                   </div>
-                  <button 
-                    type="button" 
-                    className="btn" 
-                    style={{ width: 'auto', padding: '6px 16px', fontSize: '0.75rem', background: 'rgba(255,255,255,0.15)', color: '#ffffff', flexShrink: 0, borderRadius: '8px' }}
-                    onClick={(e) => { e.stopPropagation(); mergeBatch(batchId, items); }}
-                    disabled={mergingBatch === batchId}
-                  >
-                    <Layers size={14} style={{ marginRight: '4px' }} />
-                    {mergingBatch === batchId ? 'Merging...' : 'Merge & Download'}
-                  </button>
+                  <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+                    <button 
+                      type="button" 
+                      className="btn" 
+                      style={{ width: '32px', height: '32px', padding: '0', display: 'flex', justifyContent: 'center', alignItems: 'center', background: 'rgba(255,255,255,0.15)', color: '#ffffff', borderRadius: '8px' }}
+                      onClick={(e) => { e.stopPropagation(); downloadBatchAsZip(batchId, items); }}
+                      disabled={zippingBatch === batchId}
+                      title="Download batch as ZIP"
+                    >
+                      {zippingBatch === batchId ? <span className="spinner" style={{width:'14px', height:'14px', borderWidth:'2px'}} /> : <FileArchive size={16} />}
+                    </button>
+                    <button 
+                      type="button" 
+                      className="btn" 
+                      style={{ width: '32px', height: '32px', padding: '0', display: 'flex', justifyContent: 'center', alignItems: 'center', background: 'rgba(255,255,255,0.15)', color: '#ffffff', borderRadius: '8px' }}
+                      onClick={(e) => { e.stopPropagation(); mergeBatch(batchId, items); }}
+                      disabled={mergingBatch === batchId}
+                      title="Merge into single WAV"
+                    >
+                      {mergingBatch === batchId ? <span className="spinner" style={{width:'14px', height:'14px', borderWidth:'2px'}} /> : <Layers size={16} />}
+                    </button>
+                  </div>
                 </div>
                 {expandedBatches[batchId] && (
                   <div className="batch-items" style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.8rem', paddingLeft: '1.2rem', position: 'relative' }}>

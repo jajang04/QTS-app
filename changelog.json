@@ -1,6 +1,28 @@
 {
   "releases": [
     {
+      "version": "1.0.3-SU280626P1",
+      "date": "2026-06-28",
+      "changes": [
+        {
+          "type": "feature",
+          "description": "Added a 'ZIP' button to the History Sidebar to quickly download an entire batch of generated voices as a single compressed ZIP file."
+        },
+        {
+          "type": "improvement",
+          "description": "Refined audio file naming logic across individual and batch downloads to intelligently use the first 30 characters of the generation text combined with the speaker name."
+        },
+        {
+          "type": "improvement",
+          "description": "Redesigned the History Sidebar batch action buttons into compact, icon-only squares with tooltips to perfectly prevent visual overflow in narrow screen layouts."
+        },
+        {
+          "type": "bugfix",
+          "description": "Fixed a UI flexbox layout anomaly where the 'Delete Saved Profile' button improperly expanded to fill the container width."
+        }
+      ]
+    },
+    {
       "version": "1.0.2-SA200626P2",
       "date": "2026-06-20",
       "changes": [
